@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>AI Candidate Selection — Sri Krishna Engineering</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:#1a202c;}
+
+.layout{display:flex;min-height:100vh;}
+.sidebar{
+  width:230px;background:linear-gradient(180deg,#1a365d 0%,#2a4a7f 100%);
+  color:white;padding:0;flex-shrink:0;position:sticky;top:0;height:100vh;
+}
+.sidebar-logo{
+  padding:24px 20px;border-bottom:1px solid rgba(255,255,255,0.1);
+  display:flex;align-items:center;gap:12px;
+}
+.sidebar-logo .logo-icon{
+  width:40px;height:40px;background:rgba(255,255,255,0.15);
+  border-radius:10px;display:flex;align-items:center;
+  justify-content:center;font-size:20px;flex-shrink:0;
+}
+.sidebar-logo h2{font-size:13px;font-weight:700;line-height:1.4;}
+.sidebar-logo p{font-size:10px;opacity:0.6;margin-top:2px;}
+.sidebar-menu{padding:16px 0;}
+.menu-label{
+  font-size:10px;font-weight:700;letter-spacing:1px;
+  opacity:0.5;padding:8px 20px;text-transform:uppercase;
+}
+.menu-item{
+  display:flex;align-items:center;gap:10px;
+  padding:11px 20px;font-size:13px;font-weight:500;
+  cursor:pointer;transition:background 0.2s;opacity:0.75;
+}
+.menu-item:hover,.menu-item.active{background:rgba(255,255,255,0.12);opacity:1;}
+.menu-item .icon{font-size:16px;width:20px;text-align:center;}
+.sidebar-footer{
+  position:absolute;bottom:0;left:0;right:0;
+  padding:16px 20px;border-top:1px solid rgba(255,255,255,0.1);
+  font-size:11px;opacity:0.5;
+}
+
+.main{flex:1;overflow-y:auto;}
+.topbar{
+  background:white;padding:16px 32px;
+  display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:10;
+}
+.topbar h1{font-size:18px;font-weight:700;color:#1a365d;}
+.topbar p{font-size:12px;color:#718096;margin-top:2px;}
+.topbar-badges{display:flex;gap:8px;}
+.tech-badge{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+.badge-tfidf {background:#ebf8ff;color:#1a365d;}
+.badge-ml    {background:#f0fff4;color:#276749;}
+.badge-nlp   {background:#faf5ff;color:#553c9a;}
+
+.content{padding:28px 32px;}
+
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px;}
+.stat-card{
+  background:white;border-radius:12px;padding:20px;
+  box-shadow:0 1px 8px rgba(0,0,0,0.06);
+  border-left:4px solid transparent;transition:transform 0.2s;
+}
+.stat-card:hover{transform:translateY(-2px);}
+.stat-card.blue  {border-left-color:#3182ce;}
+.stat-card.green {border-left-color:#38a169;}
+.stat-card.purple{border-left-color:#805ad5;}
+.stat-card.orange{border-left-color:#dd6b20;}
+.stat-card .stat-icon{font-size:28px;margin-bottom:8px;}
+.stat-card .stat-value{font-size:28px;font-weight:800;color:#1a202c;}
+.stat-card .stat-label{font-size:12px;color:#718096;margin-top:4px;}
+
+.section-card{
+  background:white;border-radius:14px;padding:24px;
+  box-shadow:0 1px 8px rgba(0,0,0,0.06);margin-bottom:24px;
+}
+.section-title{
+  font-size:15px;font-weight:700;color:#1a365d;
+  margin-bottom:20px;display:flex;align-items:center;gap:8px;
+  padding-bottom:12px;border-bottom:1px solid #f0f4f8;
+}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.field-label{font-size:12px;font-weight:700;color:#4a5568;margin-bottom:6px;display:block;}
+.field-select{
+  width:100%;padding:10px 14px;border:1.5px solid #e2e8f0;
+  border-radius:8px;font-size:14px;background:white;
+  color:#2d3748;outline:none;transition:border 0.2s;
+}
+.field-select:focus{border-color:#3182ce;}
+.upload-area{
+  border:2px dashed #bee3f8;border-radius:10px;padding:24px;
+  text-align:center;background:#f7fbff;cursor:pointer;transition:all 0.2s;
+}
+.upload-area:hover{background:#ebf8ff;border-color:#63b3ed;}
+.upload-area .up-icon{font-size:32px;margin-bottom:8px;}
+.upload-area p{font-size:13px;color:#4a90d9;font-weight:500;}
+.upload-area span{font-size:11px;color:#a0aec0;}
+.btn-run{
+  margin-top:20px;width:100%;padding:14px;
+  background:linear-gradient(135deg,#3182ce,#1a365d);
+  color:white;border:none;border-radius:10px;
+  font-size:15px;font-weight:700;cursor:pointer;transition:opacity 0.2s;
+}
+.btn-run:hover{opacity:0.9;}
+.btn-pdf{
+  margin-top:10px;width:100%;padding:14px;
+  background:linear-gradient(135deg,#276749,#38a169);
+  color:white;border:none;border-radius:10px;
+  font-size:15px;font-weight:700;cursor:pointer;transition:opacity 0.2s;
+}
+.btn-pdf:hover{opacity:0.9;}
+
+#loading{
+  display:none;text-align:center;padding:40px;
+  background:white;border-radius:14px;margin-bottom:24px;
+  box-shadow:0 1px 8px rgba(0,0,0,0.06);
+}
+.loading-spinner{
+  width:48px;height:48px;border:4px solid #bee3f8;
+  border-top:4px solid #3182ce;border-radius:50%;
+  animation:spin 0.8s linear infinite;margin:0 auto 16px;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+#loading p{font-size:14px;color:#3182ce;font-weight:600;}
+#loading span{font-size:12px;color:#a0aec0;}
+
+#winner-card{display:none;margin-bottom:24px;}
+.winner-inner{
+  background:linear-gradient(135deg,#1a365d,#2b6cb0);
+  border-radius:14px;padding:28px;color:white;
+  display:flex;align-items:center;gap:24px;
+}
+.winner-avatar{
+  width:70px;height:70px;border-radius:50%;
+  background:rgba(255,255,255,0.2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:28px;font-weight:800;flex-shrink:0;
+  border:3px solid rgba(255,255,255,0.4);
+}
+.winner-info{flex:1;}
+.winner-label{font-size:11px;opacity:0.7;font-weight:600;letter-spacing:1px;text-transform:uppercase;}
+.winner-name{font-size:24px;font-weight:800;margin-top:4px;}
+.winner-score-text{font-size:13px;opacity:0.85;margin-top:6px;}
+.winner-tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+.winner-tag{background:rgba(255,255,255,0.15);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;}
+.winner-score-circle{
+  width:90px;height:90px;border-radius:50%;
+  background:rgba(255,255,255,0.15);
+  border:4px solid rgba(255,255,255,0.4);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;flex-shrink:0;
+}
+.winner-score-circle .big{font-size:26px;font-weight:800;line-height:1;}
+.winner-score-circle .small{font-size:11px;opacity:0.7;margin-top:2px;}
+
+#candidates-section{display:none;margin-bottom:24px;}
+.candidates-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;}
+.cand-card{
+  background:white;border-radius:12px;padding:20px;
+  box-shadow:0 1px 8px rgba(0,0,0,0.06);
+  border-top:3px solid #e2e8f0;transition:transform 0.2s,box-shadow 0.2s;
+}
+.cand-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,0.1);}
+.cand-card.rank-1{border-top-color:#d69e2e;}
+.cand-card.rank-2{border-top-color:#718096;}
+.cand-card.rank-3{border-top-color:#c05621;}
+.cand-header{display:flex;align-items:center;gap:14px;margin-bottom:16px;}
+.cand-avatar{
+  width:48px;height:48px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;font-weight:800;color:white;flex-shrink:0;
+}
+.cand-name{font-size:15px;font-weight:700;color:#1a202c;}
+.cand-rank{font-size:12px;color:#718096;margin-top:2px;}
+.cand-score-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.cand-score-label{font-size:12px;color:#718096;}
+.cand-score-val{font-size:22px;font-weight:800;color:#1a365d;}
+.score-track{background:#f0f4f8;border-radius:20px;height:6px;margin-bottom:14px;}
+.score-fill{height:6px;border-radius:20px;}
+.score-fill.high  {background:linear-gradient(90deg,#38a169,#68d391);}
+.score-fill.medium{background:linear-gradient(90deg,#d69e2e,#f6e05e);}
+.score-fill.low   {background:linear-gradient(90deg,#e53e3e,#fc8181);}
+.metrics-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+.metric-box{background:#f7fafc;border-radius:8px;padding:8px 10px;text-align:center;}
+.metric-box .m-val{font-size:14px;font-weight:800;color:#1a365d;}
+.metric-box .m-label{font-size:10px;color:#718096;margin-top:2px;}
+.skills-area{margin-bottom:14px;}
+.skills-title{font-size:11px;font-weight:700;color:#4a5568;margin-bottom:6px;}
+.skill-chip{
+  display:inline-block;padding:3px 9px;border-radius:12px;
+  font-size:11px;font-weight:600;margin:2px;background:#ebf8ff;color:#1a365d;
+}
+.rec-badge{display:inline-block;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;width:100%;text-align:center;}
+.rec-high  {background:#c6f6d5;color:#276749;}
+.rec-med   {background:#fefcbf;color:#744210;}
+.rec-low   {background:#fed7d7;color:#822727;}
+.ml-indicator{display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:11px;color:#553c9a;font-weight:600;}
+.ml-dot{width:8px;height:8px;border-radius:50%;background:#805ad5;animation:pulse 1.5s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+
+#charts-section{display:none;margin-bottom:24px;}
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.chart-card{background:white;border-radius:12px;padding:20px;box-shadow:0 1px 8px rgba(0,0,0,0.06);}
+.chart-title{font-size:13px;font-weight:700;color:#1a365d;margin-bottom:16px;}
+.radar-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+.radar-tab{padding:4px 10px;border-radius:16px;border:1.5px solid #bee3f8;background:white;color:#1a365d;font-size:11px;font-weight:600;cursor:pointer;}
+.radar-tab.active{background:#1a365d;color:white;border-color:#1a365d;}
+
+.question-item{
+  padding:12px 16px;background:#f7fafc;border-radius:8px;
+  margin-bottom:10px;border-left:3px solid #3182ce;
+  font-size:14px;color:#2d3748;
+}
+.gap-chip{
+  display:inline-block;padding:6px 14px;background:#fed7d7;
+  color:#822727;border-radius:20px;font-size:12px;font-weight:700;margin:4px;
+}
+
+.footer-bar{
+  background:white;border-top:1px solid #e2e8f0;
+  padding:16px 32px;text-align:center;font-size:12px;color:#a0aec0;
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ── Sidebar ── -->
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">🤖</div>
+    <div>
+      <h2>AI Recruitment</h2>
+      <p>Sri Krishna Engineering</p>
+    </div>
+  </div>
+  <div class="sidebar-menu">
+    <div class="menu-label">Main Menu</div>
+    <div class="menu-item active"><span class="icon">🏠</span> Dashboard</div>
+    <div class="menu-item" onclick="window.location='/history'"><span class="icon">📋</span> History</div>
+    <div class="menu-item"><span class="icon">👥</span> Candidates</div>
+    <div class="menu-label" style="margin-top:12px">AI Engine</div>
+    <div class="menu-item"><span class="icon">🧠</span> TF-IDF NLP</div>
+    <div class="menu-item"><span class="icon">🌲</span> Random Forest ML</div>
+    <div class="menu-item"><span class="icon">📐</span> Cosine Similarity</div>
+  </div>
+  <div class="sidebar-footer">
+    IET Industry Project 2024<br>Python · Flask · scikit-learn
+  </div>
+</div>
+
+<!-- ── Main ── -->
+<div class="main">
+  <div class="topbar">
+    <div>
+      <h1>AI-Based Candidate Selection System</h1>
+      <p>Intelligent recruitment powered by Machine Learning</p>
+    </div>
+    <div class="topbar-badges">
+      <span class="tech-badge badge-tfidf">TF-IDF</span>
+      <span class="tech-badge badge-ml">Random Forest</span>
+      <span class="tech-badge badge-nlp">Cosine Similarity</span>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- Stat Cards -->
+    <div class="stat-grid">
+      <div class="stat-card blue">
+        <div class="stat-icon">📄</div>
+        <div class="stat-value" id="stat-total">0</div>
+        <div class="stat-label">Resumes Analyzed</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-icon">✅</div>
+        <div class="stat-value" id="stat-recommended">0</div>
+        <div class="stat-label">Recommended</div>
+      </div>
+      <div class="stat-card purple">
+        <div class="stat-icon">🧠</div>
+        <div class="stat-value" id="stat-avg">0</div>
+        <div class="stat-label">Avg AI Score</div>
+      </div>
+      <div class="stat-card orange">
+        <div class="stat-icon">🏆</div>
+        <div class="stat-value" id="stat-top" style="font-size:16px;margin-top:6px;">—</div>
+        <div class="stat-label">Top Candidate</div>
+      </div>
+    </div>
+
+    <!-- Upload Card -->
+    <div class="section-card">
+      <div class="section-title">📋 Upload Resumes & Configure Analysis</div>
+      <div class="form-row">
+        <div>
+          <label class="field-label">Job Role</label>
+          <select class="field-select" id="job-role">
+            {% for role in roles %}
+            <option value="{{ role }}">{{ role }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="field-label">Upload PDF Resumes (multiple allowed)</label>
+          <div class="upload-area" onclick="document.getElementById('resume-input').click()">
+            <div class="up-icon">📂</div>
+            <p id="file-label">Click to select PDF files</p>
+            <span>Supports multiple resumes at once</span>
+            <input type="file" id="resume-input" accept=".pdf" multiple
+                   style="display:none" onchange="updateLabel(this)"/>
+          </div>
+        </div>
+      </div>
+      <button class="btn-run" onclick="runAnalysis()">
+        🚀 Run AI Analysis — TF-IDF + Random Forest + Cosine Similarity
+      </button>
+      <button class="btn-pdf" onclick="downloadPDF()">
+        📄 Download PDF Report
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading">
+      <div class="loading-spinner"></div>
+      <p>Running AI Analysis...</p>
+      <span>TF-IDF vectorization → Cosine similarity → Random Forest prediction</span>
+    </div>
+
+    <!-- Winner Banner -->
+    <div id="winner-card">
+      <div class="winner-inner">
+        <div class="winner-avatar" id="w-avatar"></div>
+        <div class="winner-info">
+          <div class="winner-label">🏆 Top Recommended Candidate</div>
+          <div class="winner-name"  id="w-name"></div>
+          <div class="winner-score-text" id="w-reasons"></div>
+          <div class="winner-tags"  id="w-tags"></div>
+        </div>
+        <div class="winner-score-circle">
+          <div class="big"   id="w-score"></div>
+          <div class="small">/ 100</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Candidate Cards -->
+    <div id="candidates-section">
+      <div class="section-title" style="margin-bottom:16px;">
+        👥 All Candidates — <span id="role-label"></span>
+      </div>
+      <div class="candidates-grid" id="cards-grid"></div>
+    </div>
+
+    <!-- Charts -->
+    <div id="charts-section">
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-title">📊 Score Comparison</div>
+          <canvas id="barChart" height="220"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">🕸️ Skill Radar — click candidate to switch</div>
+          <div class="radar-tabs" id="radar-tabs"></div>
+          <canvas id="radarChart" height="220"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interview Questions -->
+    <div id="questions-section" style="display:none;" class="section-card">
+      <div class="section-title">
+        🎯 AI Generated Interview Questions — <span id="q-role"></span>
+      </div>
+      <div id="questions-list"></div>
+    </div>
+
+    <!-- Skill Gap -->
+    <div id="gap-section" style="display:none;" class="section-card">
+      <div class="section-title">⚠️ Skill Gap Analysis — Top Candidate Missing Skills</div>
+      <p style="font-size:13px;color:#718096;margin-bottom:12px;">
+        Top candidate is missing these skills. Consider training or lower priority for hiring.
+      </p>
+      <div id="gap-list"></div>
+    </div>
+
+  </div><!-- end content -->
+
+  <div class="footer-bar">
+    Sri Krishna Engineering · AI-Based Candidate Selection System · IET Industry Project ·
+    Python · Flask · scikit-learn · TF-IDF · Random Forest · Cosine Similarity
+  </div>
+</div><!-- end main -->
+</div><!-- end layout -->
+
+<script>
+const AVATAR_COLORS = ['#3182ce','#38a169','#805ad5','#dd6b20','#e53e3e','#0987a0'];
+let barChart      = null;
+let radarChart    = null;
+let allCandidates = [];
+let lastResultData = null;
+
+function getInitials(name){
+  return name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+}
+
+function updateLabel(input){
+  const lbl = document.getElementById('file-label');
+  if(input.files.length===1)     lbl.textContent = '✅ '+input.files[0].name;
+  else if(input.files.length>1)  lbl.textContent = '✅ '+input.files.length+' resumes selected';
+}
+
+async function runAnalysis(){
+  const role  = document.getElementById('job-role').value;
+  const files = document.getElementById('resume-input').files;
+  if(!files.length){ alert('Please upload at least one PDF resume!'); return; }
+
+  ['winner-card','candidates-section','charts-section',
+   'questions-section','gap-section'].forEach(id=>{
+    document.getElementById(id).style.display='none';
+  });
+  document.getElementById('loading').style.display='block';
+
+  const fd = new FormData();
+  fd.append('job_role', role);
+  for(let f of files) fd.append('resumes', f);
+
+  const res  = await fetch('/analyze',{method:'POST',body:fd});
+  const data = await res.json();
+
+  document.getElementById('loading').style.display='none';
+  if(data.error){ alert(data.error); return; }
+
+  allCandidates  = data.candidates;
+  lastResultData = data;
+
+  animateCount('stat-total',       data.total);
+  animateCount('stat-recommended', data.recommended);
+  animateCount('stat-avg',         data.avg_score);
+  document.getElementById('stat-top').textContent =
+    data.top_candidate ? data.top_candidate.name.split(' ')[0] : '—';
+
+  renderWinner(data.top_candidate);
+  renderCards(data.candidates, data.job_role);
+  renderCharts(data.candidates);
+  renderQuestions(data.questions, data.job_role);
+  renderSkillGap(data.skill_gap);
+}
+
+function animateCount(id, target){
+  const el   = document.getElementById(id);
+  let cur    = 0;
+  const step = target/30;
+  const t    = setInterval(()=>{
+    cur = Math.min(cur+step, target);
+    el.textContent = Math.round(cur);
+    if(cur>=target) clearInterval(t);
+  }, 30);
+}
+
+function renderWinner(top){
+  document.getElementById('w-avatar').textContent  = getInitials(top.name);
+  document.getElementById('w-name').textContent    = top.name;
+  document.getElementById('w-score').textContent   = top.score;
+  document.getElementById('w-reasons').textContent =
+    '✔ '+top.explanation.slice(0,3).join('  •  ✔ ');
+  const tags = document.getElementById('w-tags');
+  tags.innerHTML='';
+  top.matched_skills.slice(0,5).forEach(s=>{
+    const t=document.createElement('span');
+    t.className='winner-tag'; t.textContent=s;
+    tags.appendChild(t);
+  });
+  document.getElementById('winner-card').style.display='block';
+}
+
+function renderCards(candidates, role){
+  document.getElementById('role-label').textContent=role;
+  const grid=document.getElementById('cards-grid');
+  grid.innerHTML='';
+  candidates.forEach((c,i)=>{
+    const color   = AVATAR_COLORS[i%AVATAR_COLORS.length];
+    const rankCls = i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'';
+    const rankEmoji = i===0?'🥇':i===1?'🥈':i===2?'🥉':'#'+(i+1);
+    const fillCls = c.score>=70?'high':c.score>=40?'medium':'low';
+    const recCls  = c.recommendation==='Highly Recommended'?'rec-high':
+                    c.recommendation==='Recommended'?'rec-med':'rec-low';
+    const skills  = c.matched_skills.map(s=>`<span class="skill-chip">${s}</span>`).join('')
+                 || '<span style="color:#a0aec0;font-size:11px">No skills matched</span>';
+    const mlStatus = c.ml_suitable
+      ? '🟢 ML model: Suitable candidate'
+      : '🔴 ML model: Below threshold';
+
+    grid.innerHTML+=`
+    <div class="cand-card ${rankCls}">
+      <div class="cand-header">
+        <div class="cand-avatar" style="background:${color}">${getInitials(c.name)}</div>
+        <div>
+          <div class="cand-name">${rankEmoji} ${c.name}</div>
+          <div class="cand-rank">Rank #${c.rank} · ${c.recommendation}</div>
+        </div>
+      </div>
+      <div class="ml-indicator"><div class="ml-dot"></div>${mlStatus}</div>
+      <div class="cand-score-row">
+        <span class="cand-score-label">Overall Score</span>
+        <span class="cand-score-val">${c.score}<span style="font-size:14px;font-weight:400;color:#718096">/100</span></span>
+      </div>
+      <div class="score-track">
+        <div class="score-fill ${fillCls}" style="width:${c.score}%"></div>
+      </div>
+      <div class="metrics-row">
+        <div class="metric-box"><div class="m-val">${c.tfidf_score}%</div><div class="m-label">TF-IDF Score</div></div>
+        <div class="metric-box"><div class="m-val">${c.ml_prob}%</div><div class="m-label">ML Confidence</div></div>
+        <div class="metric-box"><div class="m-val">${c.skill_pct}%</div><div class="m-label">Skill Match</div></div>
+        <div class="metric-box"><div class="m-val">${c.has_exp?'Yes':'No'}</div><div class="m-label">Experience</div></div>
+      </div>
+      <div class="skills-area">
+        <div class="skills-title">MATCHED SKILLS</div>${skills}
+      </div>
+      <div class="rec-badge ${recCls}">${c.recommendation}</div>
+    </div>`;
+  });
+  document.getElementById('candidates-section').style.display='block';
+}
+
+function renderCharts(candidates){
+  const names  = candidates.map(c=>c.name);
+  const scores = candidates.map(c=>c.score);
+
+  if(barChart) barChart.destroy();
+  barChart = new Chart(document.getElementById('barChart').getContext('2d'),{
+    type:'bar',
+    data:{
+      labels:names,
+      datasets:[
+        {label:'Total Score', data:scores,
+         backgroundColor:scores.map(s=>s>=70?'rgba(56,161,105,0.8)':s>=40?'rgba(214,158,46,0.8)':'rgba(229,62,62,0.8)'),
+         borderRadius:8},
+        {label:'TF-IDF',      data:candidates.map(c=>c.tfidf_score), backgroundColor:'rgba(49,130,206,0.4)',borderRadius:8},
+        {label:'ML Confidence',data:candidates.map(c=>c.ml_prob),    backgroundColor:'rgba(128,90,213,0.4)',borderRadius:8}
+      ]
+    },
+    options:{responsive:true,scales:{y:{beginAtZero:true,max:100}},
+             plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}}
+  });
+
+  const tabs=document.getElementById('radar-tabs');
+  tabs.innerHTML='';
+  candidates.forEach((c,i)=>{
+    const btn=document.createElement('button');
+    btn.className='radar-tab'+(i===0?' active':'');
+    btn.textContent=c.name;
+    btn.onclick=()=>{
+      document.querySelectorAll('.radar-tab').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      updateRadar(c);
+    };
+    tabs.appendChild(btn);
+  });
+  updateRadar(candidates[0]);
+  document.getElementById('charts-section').style.display='block';
+}
+
+function updateRadar(c){
+  const labels=Object.keys(c.radar);
+  const values=Object.values(c.radar);
+  if(radarChart) radarChart.destroy();
+  radarChart=new Chart(document.getElementById('radarChart').getContext('2d'),{
+    type:'radar',
+    data:{labels,datasets:[{
+      label:c.name, data:values,
+      backgroundColor:'rgba(49,130,206,0.15)',
+      borderColor:'rgba(49,130,206,0.9)',
+      pointBackgroundColor:'#3182ce', borderWidth:2
+    }]},
+    options:{responsive:true,
+      scales:{r:{beginAtZero:true,max:100,ticks:{stepSize:20,font:{size:10}},
+                 pointLabels:{font:{size:11}}}},
+      plugins:{legend:{display:false}}}
+  });
+}
+
+function renderQuestions(questions, role){
+  if(!questions || !questions.length) return;
+  document.getElementById('q-role').textContent=role;
+  const list=document.getElementById('questions-list');
+  list.innerHTML=questions.map((q,i)=>
+    `<div class="question-item"><strong style="color:#1a365d">Q${i+1}.</strong> ${q}</div>`
+  ).join('');
+  document.getElementById('questions-section').style.display='block';
+}
+
+function renderSkillGap(skillGap){
+  if(!skillGap || !skillGap.length) return;
+  const list=document.getElementById('gap-list');
+  list.innerHTML=skillGap.map(s=>
+    `<span class="gap-chip">⚠️ ${s}</span>`
+  ).join('');
+  document.getElementById('gap-section').style.display='block';
+}
+
+async function downloadPDF(){
+  if(!lastResultData){ alert('Please run analysis first!'); return; }
+  const form=document.createElement('form');
+  form.method='POST';
+  form.action='/download_pdf';
+  const input=document.createElement('input');
+  input.type='hidden';
+  input.name='data';
+  input.value=JSON.stringify(lastResultData);
+  form.appendChild(input);
+  document.body.appendChild(form);
+  form.submit();
+  document.body.removeChild(form);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+flask
+flask-sqlalchemy
+pdfplumber
+scikit-learn
+numpy
+pandas
+reportlab
+gunicorn

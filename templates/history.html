@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Analysis History</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:#1a202c;}
+.header{background:linear-gradient(135deg,#1a365d,#2b6cb0);color:white;padding:20px 40px;display:flex;align-items:center;justify-content:space-between;}
+.header h1{font-size:20px;font-weight:700;}
+.back-btn{padding:8px 18px;background:rgba(255,255,255,0.15);color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;}
+.container{max-width:1000px;margin:32px auto;padding:0 20px;}
+.card{background:white;border-radius:14px;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,0.07);margin-bottom:20px;}
+.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #f0f4f8;}
+.role-name{font-size:16px;font-weight:700;color:#1a365d;}
+.date{font-size:12px;color:#a0aec0;}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.stat{background:#f7fafc;border-radius:8px;padding:12px;text-align:center;}
+.stat .val{font-size:20px;font-weight:800;color:#1a365d;}
+.stat .lbl{font-size:11px;color:#718096;margin-top:3px;}
+.top-badge{background:#c6f6d5;color:#276749;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;}
+.empty{text-align:center;padding:60px;color:#a0aec0;font-size:15px;}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📋 Analysis History</h1>
+  <a href="/" class="back-btn">← Back to Dashboard</a>
+</div>
+<div class="container">
+  {% if analyses %}
+    {% for a in analyses %}
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="role-name">{{ a.job_role }}</div>
+          <div class="date">{{ a.created_at.strftime('%d %b %Y  %I:%M %p') }}</div>
+        </div>
+        <span class="top-badge">🏆 {{ a.top_candidate }}</span>
+      </div>
+      <div class="stats-row">
+        <div class="stat"><div class="val">{{ a.total_resumes }}</div><div class="lbl">Resumes</div></div>
+        <div class="stat"><div class="val">{{ a.recommended }}</div><div class="lbl">Recommended</div></div>
+        <div class="stat"><div class="val">{{ a.top_score }}</div><div class="lbl">Top Score</div></div>
+        <div class="stat"><div class="val">{{ a.avg_score }}</div><div class="lbl">Avg Score</div></div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">No analyses yet. Go back and analyze some resumes first!</div>
+  {% endif %}
+</div>
+</body>
+</html>
