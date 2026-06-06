@@ -224,6 +224,47 @@ body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:#1a202c;}
   background:white;border-top:1px solid #e2e8f0;
   padding:16px 32px;text-align:center;font-size:12px;color:#a0aec0;
 }
+/* ── Mobile Responsive ── */
+@media (max-width: 768px) {
+  .layout { flex-direction: column; }
+  .sidebar {
+    width: 100%; height: auto; position: relative;
+    display: flex; flex-direction: column;
+  }
+  .sidebar-menu {
+    display: flex; flex-direction: row;
+    flex-wrap: wrap; padding: 8px;
+  }
+  .menu-label { display: none; }
+  .menu-item {
+    padding: 8px 12px; font-size: 12px;
+    border-radius: 8px; margin: 2px;
+  }
+  .sidebar-footer { display: none; }
+  .sidebar-logo { padding: 16px; }
+  .topbar {
+    flex-direction: column; align-items: flex-start;
+    gap: 8px; padding: 14px 16px;
+  }
+  .topbar-badges { flex-wrap: wrap; gap: 6px; }
+  .content { padding: 16px; }
+  .stat-grid { grid-template-columns: repeat(2,1fr); gap: 10px; }
+  .form-row { grid-template-columns: 1fr; }
+  .charts-grid { grid-template-columns: 1fr; }
+  .candidates-grid { grid-template-columns: 1fr; }
+  .winner-inner { flex-direction: column; text-align: center; gap: 16px; }
+  .winner-tags { justify-content: center; }
+  .winner-score-circle { margin: 0 auto; }
+  .metrics-row { grid-template-columns: repeat(2,1fr); }
+  .topbar h1 { font-size: 15px; }
+  .btn-run, .btn-pdf { font-size: 13px; padding: 12px; }
+}
+
+@media (max-width: 400px) {
+  .stat-grid { grid-template-columns: 1fr 1fr; }
+  .winner-name { font-size: 18px; }
+  .cand-score-val { font-size: 18px; }
+}
 </style>
 </head>
 <body>

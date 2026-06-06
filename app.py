@@ -1,402 +1,702 @@
-from flask import Flask, request, render_template, jsonify, send_file
-import pdfplumber, os, io
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from reportlab.lib import colors
-from models import db, Analysis, Candidate
-from datetime import datetime
+from matplotlib.pyplot import margins
 
-app = Flask(__name__)
-app.config['UPLOAD_FOLDER']   = 'uploads'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///recruitment.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db.init_app(app)
+# The file previously contained raw HTML which caused a Python syntax error.
+# Store the HTML content as a string so the file is valid Python.
+html_content = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>AI Candidate Selection — Sri Krishna Engineering</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+*{margins:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:#1a202c;}
 
-JOB_ROLES = {
-    "CNC Operator": {
-        "description": """cnc machining lathe milling g-code m-code blueprint autocad
-            drilling turning boring grinding fixture jig quality inspection
-            mechanical engineering iti diploma experience operator""",
-        "skills": ["cnc","machining","lathe","milling","g-code","m-code",
-                   "blueprint","autocad","drilling","grinding"],
-        "experience_keywords": ["year","years","experience","worked"],
-        "education_keywords": ["diploma","iti","polytechnic","mechanical","degree"]
-    },
-    "Mechanical Engineer": {
-        "description": """autocad solidworks catia design mechanical manufacturing
-            cad cam ansys analysis simulation drawing production planning
-            engineering degree btech be experience engineer""",
-        "skills": ["autocad","solidworks","catia","design","mechanical",
-                   "manufacturing","cad","cam","ansys","simulation"],
-        "experience_keywords": ["year","years","experience","worked"],
-        "education_keywords": ["b.e","b.tech","mechanical","engineering","degree"]
-    },
-    "Technician": {
-        "description": """maintenance repair electrical hydraulic pneumatic welding
-            fitting plumbing wiring motor pump compressor troubleshoot
-            iti diploma certificate technical experience technician""",
-        "skills": ["maintenance","repair","electrical","hydraulic","pneumatic",
-                   "welding","fitting","wiring","motor","troubleshoot"],
-        "experience_keywords": ["year","years","experience","worked"],
-        "education_keywords": ["iti","diploma","certificate","vocational"]
-    },
-    "Quality Inspector": {
-        "description": """quality inspection qc measurement micrometer vernier
-            iso six sigma testing calibration documentation report
-            standards specification tolerance degree diploma experience""",
-        "skills": ["quality","inspection","qc","measurement","micrometer",
-                   "vernier","iso","six sigma","testing","calibration"],
-        "experience_keywords": ["year","years","experience","worked"],
-        "education_keywords": ["diploma","degree","b.e","b.tech","quality"]
-    }
+.layout{display:flex;min-height:100vh;}
+.sidebar{
+  width:230px;background:linear-gradient(180deg,#1a365d 0%,#2a4a7f 100%);
+  color:white;padding:0;flex-shrink:0;position:sticky;top:0;height:100vh;
+}
+.sidebar-logo{
+  padding:24px 20px;border-bottom:1px solid rgba(255,255,255,0.1);
+  display:flex;align-items:center;gap:12px;
+}
+.sidebar-logo .logo-icon{
+  width:40px;height:40px;background:rgba(255,255,255,0.15);
+  border-radius:10px;display:flex;align-items:center;
+  justify-content:center;font-size:20px;flex-shrink:0;
+}
+.sidebar-logo h2{font-size:13px;font-weight:700;line-height:1.4;}
+.sidebar-logo p{font-size:10px;opacity:0.6;margin-top:2px;}
+.sidebar-menu{padding:16px 0;}
+.menu-label{
+  font-size:10px;font-weight:700;letter-spacing:1px;
+  opacity:0.5;padding:8px 20px;text-transform:uppercase;
+}
+.menu-item{
+  display:flex;align-items:center;gap:10px;
+  padding:11px 20px;font-size:13px;font-weight:500;
+  cursor:pointer;transition:background 0.2s;opacity:0.75;
+}
+.menu-item:hover,.menu-item.active{background:rgba(255,255,255,0.12);opacity:1;}
+.menu-item .icon{font-size:16px;width:20px;text-align:center;}
+.sidebar-footer{
+  position:absolute;bottom:0;left:0;right:0;
+  padding:16px 20px;border-top:1px solid rgba(255,255,255,0.1);
+  font-size:11px;opacity:0.5;
 }
 
-# ── Train ML Model ─────────────────────────────────────────────────────────────
-def train_ml_model():
-    np.random.seed(42)
-    X, y = [], []
-    for _ in range(200):
-        skill = np.random.uniform(0,100)
-        exp   = np.random.choice([0,1])
-        edu   = np.random.choice([0,1])
-        extra = np.random.choice([0,1])
-        tfidf = np.random.uniform(0,100)
-        label = 1 if (skill>50 and (exp==1 or edu==1)) else 0
-        X.append([skill,exp,edu,extra,tfidf])
-        y.append(label)
-    scaler = StandardScaler()
-    Xs = scaler.fit_transform(X)
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(Xs, y)
-    return model, scaler
+.main{flex:1;overflow-y:auto;}
+.topbar{
+  background:white;padding:16px 32px;
+  display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:10;
+}
+.topbar h1{font-size:18px;font-weight:700;color:#1a365d;}
+.topbar p{font-size:12px;color:#718096;margin-top:2px;}
+.topbar-badges{display:flex;gap:8px;}
+.tech-badge{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+.badge-tfidf {background:#ebf8ff;color:#1a365d;}
+.badge-ml    {background:#f0fff4;color:#276749;}
+.badge-nlp   {background:#faf5ff;color:#553c9a;}
 
-ML_MODEL, ML_SCALER = train_ml_model()
+.content{padding:28px 32px;}
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
-def extract_text(filepath):
-    text = ""
-    try:
-        with pdfplumber.open(filepath) as pdf:
-            for page in pdf.pages:
-                t = page.extract_text()
-                if t: text += t + " "
-    except: pass
-    return text.lower()
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px;}
+.stat-card{
+  background:white;border-radius:12px;padding:20px;
+  box-shadow:0 1px 8px rgba(0,0,0,0.06);
+  border-left:4px solid transparent;transition:transform 0.2s;
+}
+.stat-card:hover{transform:translateY(-2px);}
+.stat-card.blue  {border-left-color:#3182ce;}
+.stat-card.green {border-left-color:#38a169;}
+.stat-card.purple{border-left-color:#805ad5;}
+.stat-card.orange{border-left-color:#dd6b20;}
+.stat-card .stat-icon{font-size:28px;margin-bottom:8px;}
+.stat-card .stat-value{font-size:28px;font-weight:800;color:#1a202c;}
+.stat-card .stat-label{font-size:12px;color:#718096;margin-top:4px;}
 
-def tfidf_cosine_score(resume_text, job_desc):
-    try:
-        vec    = TfidfVectorizer(stop_words='english')
-        matrix = vec.fit_transform([resume_text, job_desc])
-        score  = cosine_similarity(matrix[0:1], matrix[1:2])
-        return round(float(score[0][0])*100, 1)
-    except: return 0.0
+.section-card{
+  background:white;border-radius:14px;padding:24px;
+  box-shadow:0 1px 8px rgba(0,0,0,0.06);margin-bottom:24px;
+}
+.section-title{
+  font-size:15px;font-weight:700;color:#1a365d;
+  margin-bottom:20px;display:flex;align-items:center;gap:8px;
+  padding-bottom:12px;border-bottom:1px solid #f0f4f8;
+}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.field-label{font-size:12px;font-weight:700;color:#4a5568;margin-bottom:6px;display:block;}
+.field-select{
+  width:100%;padding:10px 14px;border:1.5px solid #e2e8f0;
+  border-radius:8px;font-size:14px;background:white;
+  color:#2d3748;outline:none;transition:border 0.2s;
+}
+.field-select:focus{border-color:#3182ce;}
+.field-input{
+  width:100%;padding:10px 14px;border:1.5px solid #e2e8f0;
+  border-radius:8px;font-size:14px;outline:none;transition:border 0.2s;
+  background:white;color:#2d3748;
+}
+.field-input:focus{border-color:#3182ce;}
+.upload-area{
+  border:2px dashed #bee3f8;border-radius:10px;padding:24px;
+  text-align:center;background:#f7fbff;cursor:pointer;transition:all 0.2s;
+}
+.upload-area:hover{background:#ebf8ff;border-color:#63b3ed;}
+.upload-area .up-icon{font-size:32px;margin-bottom:8px;}
+.upload-area p{font-size:13px;color:#4a90d9;font-weight:500;}
+.upload-area span{font-size:11px;color:#a0aec0;}
+.btn-run{
+  margin-top:20px;width:100%;padding:14px;
+  background:linear-gradient(135deg,#3182ce,#1a365d);
+  color:white;border:none;border-radius:10px;
+  font-size:15px;font-weight:700;cursor:pointer;transition:opacity 0.2s;
+}
+.btn-run:hover{opacity:0.9;}
+.btn-pdf{
+  margin-top:10px;width:100%;padding:14px;
+  background:linear-gradient(135deg,#276749,#38a169);
+  color:white;border:none;border-radius:10px;
+  font-size:15px;font-weight:700;cursor:pointer;transition:opacity 0.2s;
+}
+.btn-pdf:hover{opacity:0.9;}
 
-def keyword_score(text, role_name):
-    role    = JOB_ROLES[role_name]
-    matched = [s for s in role["skills"] if s in text]
-    missing = [s for s in role["skills"] if s not in text]
-    skill_pct   = (len(matched)/len(role["skills"]))*100
-    has_exp     = int(any(w in text for w in role["experience_keywords"]))
-    has_edu     = int(any(w in text for w in role["education_keywords"]))
-    extra_words = ["communication","teamwork","leadership","ms office","english","computer"]
-    has_extra   = int(any(w in text for w in extra_words))
-    explanation = []
-    if matched:     explanation.append(f"Matched skills: {', '.join(matched)}")
-    if has_exp:     explanation.append("Has relevant experience")
-    if has_edu:     explanation.append("Has relevant education")
-    if has_extra:   explanation.append("Has additional soft skills")
-    return {"skill_pct":round(skill_pct,1),"has_exp":has_exp,"has_edu":has_edu,
-            "has_extra":has_extra,"matched_skills":matched,
-            "missing_skills":missing,"explanation":explanation}
+#loading{
+  display:none;text-align:center;padding:40px;
+  background:white;border-radius:14px;margin-bottom:24px;
+  box-shadow:0 1px 8px rgba(0,0,0,0.06);
+}
+.loading-spinner{
+  width:48px;height:48px;border:4px solid #bee3f8;
+  border-top:4px solid #3182ce;border-radius:50%;
+  animation:spin 0.8s linear infinite;margin:0 auto 16px;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+#loading p{font-size:14px;color:#3182ce;font-weight:600;}
+#loading span{font-size:12px;color:#a0aec0;}
 
-def ml_predict(skill_pct, has_exp, has_edu, has_extra, tfidf):
-    features = np.array([[skill_pct,has_exp,has_edu,has_extra,tfidf]])
-    scaled   = ML_SCALER.transform(features)
-    prob     = ML_MODEL.predict_proba(scaled)[0][1]
-    label    = ML_MODEL.predict(scaled)[0]
-    return round(prob*100,1), int(label)
+#winner-card{display:none;margin-bottom:24px;}
+.winner-inner{
+  background:linear-gradient(135deg,#1a365d,#2b6cb0);
+  border-radius:14px;padding:28px;color:white;
+  display:flex;align-items:center;gap:24px;
+}
+.winner-avatar{
+  width:70px;height:70px;border-radius:50%;
+  background:rgba(255,255,255,0.2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:28px;font-weight:800;flex-shrink:0;
+  border:3px solid rgba(255,255,255,0.4);
+}
+.winner-info{flex:1;}
+.winner-label{font-size:11px;opacity:0.7;font-weight:600;letter-spacing:1px;text-transform:uppercase;}
+.winner-name{font-size:24px;font-weight:800;margin-top:4px;}
+.winner-score-text{font-size:13px;opacity:0.85;margin-top:6px;}
+.winner-tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+.winner-tag{background:rgba(255,255,255,0.15);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;}
+.winner-score-circle{
+  width:90px;height:90px;border-radius:50%;
+  background:rgba(255,255,255,0.15);
+  border:4px solid rgba(255,255,255,0.4);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;flex-shrink:0;
+}
+.winner-score-circle .big{font-size:26px;font-weight:800;line-height:1;}
+.winner-score-circle .small{font-size:11px;opacity:0.7;margin-top:2px;}
 
-def get_radar(text, role_name, tfidf_score):
-    role    = JOB_ROLES[role_name]
-    matched = sum(1 for s in role["skills"] if s in text)
-    has_exp = any(w in text for w in role["experience_keywords"])
-    has_edu = any(w in text for w in role["education_keywords"])
-    has_extra = any(w in text for w in ["communication","teamwork","leadership"])
-    return {
-        "Technical Skills": round((matched/len(role["skills"]))*100),
-        "Experience":       100 if has_exp   else 15,
-        "Education":        100 if has_edu   else 15,
-        "Soft Skills":      100 if has_extra else 15,
-        "AI Match":         round(tfidf_score)
-    }
+#candidates-section{display:none;margin-bottom:24px;}
+.candidates-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;}
+.cand-card{
+  background:white;border-radius:12px;padding:20px;
+  box-shadow:0 1px 8px rgba(0,0,0,0.06);
+  border-top:3px solid #e2e8f0;transition:transform 0.2s,box-shadow 0.2s;
+}
+.cand-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,0.1);}
+.cand-card.rank-1{border-top-color:#d69e2e;}
+.cand-card.rank-2{border-top-color:#718096;}
+.cand-card.rank-3{border-top-color:#c05621;}
+.cand-header{display:flex;align-items:center;gap:14px;margin-bottom:16px;}
+.cand-avatar{
+  width:48px;height:48px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;font-weight:800;color:white;flex-shrink:0;
+}
+.cand-name{font-size:15px;font-weight:700;color:#1a202c;}
+.cand-rank{font-size:12px;color:#718096;margin-top:2px;}
+.cand-score-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.cand-score-label{font-size:12px;color:#718096;}
+.cand-score-val{font-size:22px;font-weight:800;color:#1a365d;}
+.score-track{background:#f0f4f8;border-radius:20px;height:6px;margin-bottom:14px;}
+.score-fill{height:6px;border-radius:20px;}
+.score-fill.high  {background:linear-gradient(90deg,#38a169,#68d391);}
+.score-fill.medium{background:linear-gradient(90deg,#d69e2e,#f6e05e);}
+.score-fill.low   {background:linear-gradient(90deg,#e53e3e,#fc8181);}
+.metrics-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+.metric-box{background:#f7fafc;border-radius:8px;padding:8px 10px;text-align:center;}
+.metric-box .m-val{font-size:14px;font-weight:800;color:#1a365d;}
+.metric-box .m-label{font-size:10px;color:#718096;margin-top:2px;}
+.skills-area{margin-bottom:14px;}
+.skills-title{font-size:11px;font-weight:700;color:#4a5568;margin-bottom:6px;}
+.skill-chip{
+  display:inline-block;padding:3px 9px;border-radius:12px;
+  font-size:11px;font-weight:600;margin:2px;background:#ebf8ff;color:#1a365d;
+}
+.rec-badge{display:inline-block;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;width:100%;text-align:center;}
+.rec-high  {background:#c6f6d5;color:#276749;}
+.rec-med   {background:#fefcbf;color:#744210;}
+.rec-low   {background:#fed7d7;color:#822727;}
+.ml-indicator{display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:11px;color:#553c9a;font-weight:600;}
+.ml-dot{width:8px;height:8px;border-radius:50%;background:#805ad5;animation:pulse 1.5s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
 
-# ── NLTK-style text cleaning (Tier 2) ─────────────────────────────────────────
-STOPWORDS = {"a","an","the","and","or","but","in","on","at","to","for",
-             "of","with","by","from","is","was","are","were","be","been",
-             "have","has","had","do","does","did","will","would","could",
-             "should","may","might","i","my","we","our","you","your"}
+#charts-section{display:none;margin-bottom:24px;}
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.chart-card{background:white;border-radius:12px;padding:20px;box-shadow:0 1px 8px rgba(0,0,0,0.06);}
+.chart-title{font-size:13px;font-weight:700;color:#1a365d;margin-bottom:16px;}
+.radar-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+.radar-tab{padding:4px 10px;border-radius:16px;border:1.5px solid #bee3f8;background:white;color:#1a365d;font-size:11px;font-weight:600;cursor:pointer;}
+.radar-tab.active{background:#1a365d;color:white;border-color:#1a365d;}
 
-def clean_text(text):
-    import re
-    text = re.sub(r'[^a-z0-9\s\-]','', text.lower())
-    words = text.split()
-    words = [w for w in words if w not in STOPWORDS and len(w)>2]
-    return " ".join(words)
-
-# ── Interview question generator (Tier 2) ─────────────────────────────────────
-INTERVIEW_QUESTIONS = {
-    "CNC Operator": [
-        "Can you explain the difference between G-code and M-code?",
-        "How do you set up a CNC machine for a new job?",
-        "What safety precautions do you follow while operating CNC machines?",
-        "Describe a time you identified and fixed a machining error.",
-        "How do you read and interpret engineering blueprints?",
-    ],
-    "Mechanical Engineer": [
-        "What CAD software have you used and for what type of projects?",
-        "Explain the difference between CAD and CAM.",
-        "How do you approach a new mechanical design problem?",
-        "Have you used ANSYS or any simulation tool? Explain your experience.",
-        "How do you ensure manufacturing quality in your designs?",
-    ],
-    "Technician": [
-        "Describe your experience with hydraulic and pneumatic systems.",
-        "How do you troubleshoot an electrical fault in a machine?",
-        "What safety procedures do you follow during maintenance?",
-        "Have you worked with welding equipment? What types?",
-        "How do you prioritize maintenance tasks during production?",
-    ],
-    "Quality Inspector": [
-        "What measuring instruments have you used for quality inspection?",
-        "Explain the concept of Six Sigma and how you have applied it.",
-        "How do you document a non-conformance report?",
-        "What is the difference between accuracy and precision in measurement?",
-        "How do you handle a situation where a batch fails quality standards?",
-    ]
+.question-item{
+  padding:12px 16px;background:#f7fafc;border-radius:8px;
+  margin-bottom:10px;border-left:3px solid #3182ce;
+  font-size:14px;color:#2d3748;
+}
+.gap-chip{
+  display:inline-block;padding:6px 14px;background:#fed7d7;
+  color:#822727;border-radius:20px;font-size:12px;font-weight:700;margin:4px;
 }
 
-# ── PDF Report Generator ───────────────────────────────────────────────────────
-def generate_pdf_report(analysis_data, candidates_data):
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    w, h = A4
+/* ── Email notification badge ── */
+.email-sent-badge{
+  display:inline-block;background:#c6f6d5;color:#276749;
+  padding:8px 16px;border-radius:8px;font-size:13px;
+  font-weight:600;margin-top:12px;
+}
 
-    # Header
-    c.setFillColor(colors.HexColor('#1a365d'))
-    c.rect(0, h-80, w, 80, fill=True, stroke=False)
-    c.setFillColor(colors.white)
-    c.setFont("Helvetica-Bold", 18)
-    c.drawString(40, h-40, "AI-Based Candidate Selection Report")
-    c.setFont("Helvetica", 11)
-    c.drawString(40, h-62, f"Sri Krishna Engineering  |  {datetime.now().strftime('%d %B %Y  %H:%M')}")
+/* ── Mobile Responsive ── */
+@media(max-width:768px){
+  .layout{flex-direction:column;}
+  .sidebar{width:100%;height:auto;position:relative;}
+  .sidebar-menu{display:flex;flex-direction:row;flex-wrap:wrap;padding:8px;}
+  .menu-label{display:none;}
+  .menu-item{padding:8px 12px;font-size:12px;border-radius:8px;margin:2px;}
+  .sidebar-footer{display:none;}
+  .sidebar-logo{padding:16px;}
+  .topbar{flex-direction:column;align-items:flex-start;gap:8px;padding:14px 16px;}
+  .topbar-badges{flex-wrap:wrap;gap:6px;}
+  .content{padding:16px;}
+  .stat-grid{grid-template-columns:repeat(2,1fr);gap:10px;}
+  .form-row{grid-template-columns:1fr;}
+  .charts-grid{grid-template-columns:1fr;}
+  .candidates-grid{grid-template-columns:1fr;}
+  .winner-inner{flex-direction:column;text-align:center;gap:16px;}
+  .winner-tags{justify-content:center;}
+  .winner-score-circle{margin:0 auto;}
+  .metrics-row{grid-template-columns:repeat(2,1fr);}
+  .topbar h1{font-size:15px;}
+  .btn-run,.btn-pdf{font-size:13px;padding:12px;}
+}
+@media(max-width:400px){
+  .stat-grid{grid-template-columns:1fr 1fr;}
+  .winner-name{font-size:18px;}
+  .cand-score-val{font-size:18px;}
+}
 
-    # Summary box
-    c.setFillColor(colors.HexColor('#ebf8ff'))
-    c.rect(30, h-160, w-60, 68, fill=True, stroke=False)
-    c.setFillColor(colors.HexColor('#1a365d'))
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(44, h-104, f"Job Role: {analysis_data['job_role']}")
-    c.setFont("Helvetica", 11)
-    c.drawString(44, h-122, f"Total Resumes: {analysis_data['total']}     "
-                            f"Recommended: {analysis_data['recommended']}     "
-                            f"Avg Score: {analysis_data['avg_score']}/100")
-    c.drawString(44, h-140, f"Top Candidate: {analysis_data['top_candidate']['name']}  "
-                            f"(Score: {analysis_data['top_candidate']['score']}/100)")
+.footer-bar{
+  background:white;border-top:1px solid #e2e8f0;
+  padding:16px 32px;text-align:center;font-size:12px;color:#a0aec0;
+}
+</style>
+</head>
+<body>
+<div class="layout">
 
-    # Candidates
-    y = h - 185
-    c.setFont("Helvetica-Bold", 13)
-    c.setFillColor(colors.HexColor('#1a365d'))
-    c.drawString(40, y, "Candidate Rankings")
-    y -= 8
-    c.setStrokeColor(colors.HexColor('#bee3f8'))
-    c.line(40, y, w-40, y)
-    y -= 20
+<!-- ── Sidebar ── -->
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">🤖</div>
+    <div>
+      <h2>AI Recruitment</h2>
+      <p>Sri Krishna Engineering</p>
+    </div>
+  </div>
+  <div class="sidebar-menu">
+    <div class="menu-label">Main Menu</div>
+    <div class="menu-item active"><span class="icon">🏠</span> Dashboard</div>
+    <div class="menu-item" onclick="window.location='/history'"><span class="icon">📋</span> History</div>
+    <div class="menu-label" style="margin-top:12px">AI Engine</div>
+    <div class="menu-item"><span class="icon">🧠</span> TF-IDF NLP</div>
+    <div class="menu-item"><span class="icon">🌲</span> Random Forest</div>
+    <div class="menu-item"><span class="icon">📐</span> Cosine Similarity</div>
+    <div class="menu-label" style="margin-top:12px">Account</div>
+    <div class="menu-item" onclick="window.location='/logout'"
+         style="color:#fc8181;opacity:1;">
+      <span class="icon">🚪</span> Logout
+    </div>
+  </div>
+  <div class="sidebar-footer">
+    IET Industry Project 2024<br>Python · Flask · scikit-learn
+  </div>
+</div>
 
-    for cand in candidates_data:
-        if y < 120:
-            c.showPage()
-            y = h - 60
+<!-- ── Main ── -->
+<div class="main">
+  <div class="topbar">
+    <div>
+      <h1>AI-Based Candidate Selection System</h1>
+      <p>Intelligent recruitment powered by Machine Learning</p>
+    </div>
+    <div class="topbar-badges">
+      <span class="tech-badge badge-tfidf">TF-IDF</span>
+      <span class="tech-badge badge-ml">Random Forest</span>
+      <span class="tech-badge badge-nlp">Cosine Similarity</span>
+    </div>
+  </div>
 
-        # Candidate name row
-        rec_color = ('#c6f6d5' if cand['recommendation']=='Highly Recommended'
-                     else '#fefcbf' if cand['recommendation']=='Recommended'
-                     else '#fed7d7')
-        c.setFillColor(colors.HexColor('#f7fafc'))
-        c.rect(30, y-44, w-60, 54, fill=True, stroke=False)
+  <div class="content">
 
-        rank_emoji = ['🥇','🥈','🥉']
-        rank_label = rank_emoji[cand['rank']-1] if cand['rank']<=3 else f"#{cand['rank']}"
+    <!-- Stat Cards -->
+    <div class="stat-grid">
+      <div class="stat-card blue">
+        <div class="stat-icon">📄</div>
+        <div class="stat-value" id="stat-total">0</div>
+        <div class="stat-label">Resumes Analyzed</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-icon">✅</div>
+        <div class="stat-value" id="stat-recommended">0</div>
+        <div class="stat-label">Recommended</div>
+      </div>
+      <div class="stat-card purple">
+        <div class="stat-icon">🧠</div>
+        <div class="stat-value" id="stat-avg">0</div>
+        <div class="stat-label">Avg AI Score</div>
+      </div>
+      <div class="stat-card orange">
+        <div class="stat-icon">🏆</div>
+        <div class="stat-value" id="stat-top"
+             style="font-size:16px;margin-top:6px;">—</div>
+        <div class="stat-label">Top Candidate</div>
+      </div>
+    </div>
 
-        c.setFillColor(colors.HexColor('#1a365d'))
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(44, y+2, f"{cand['rank']}.  {cand['name']}")
+    <!-- Upload Card -->
+    <div class="section-card">
+      <div class="section-title">📋 Upload Resumes & Configure Analysis</div>
+      <div class="form-row">
+        <div>
+          <label class="field-label">Job Role</label>
+          <select class="field-select" id="job-role">
+            {% for role in roles %}
+            <option value="{{ role }}">{{ role }}</option>
+            {% endfor %}
+          </select>
+          <div style="margin-top:14px;">
+            <label class="field-label">📧 HR Email (optional — get results by email)</label>
+            <input type="email" id="hr-email" class="field-input"
+                   placeholder="hr@srikrishna.com"/>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Upload PDF Resumes (multiple allowed)</label>
+          <div class="upload-area"
+               onclick="document.getElementById('resume-input').click()">
+            <div class="up-icon">📂</div>
+            <p id="file-label">Click to select PDF files</p>
+            <span>Supports multiple resumes at once</span>
+            <input type="file" id="resume-input" accept=".pdf" multiple
+                   style="display:none" onchange="updateLabel(this)"/>
+          </div>
+        </div>
+      </div>
+      <button class="btn-run" onclick="runAnalysis()">
+        🚀 Run AI Analysis — TF-IDF + Random Forest + Cosine Similarity
+      </button>
+      <button class="btn-pdf" onclick="downloadPDF()">
+        📄 Download PDF Report
+      </button>
+    </div>
 
-        c.setFont("Helvetica", 10)
-        c.setFillColor(colors.HexColor('#4a5568'))
-        c.drawString(44, y-14, f"Total Score: {cand['score']}/100   |   "
-                               f"TF-IDF: {cand['tfidf_score']}%   |   "
-                               f"ML Confidence: {cand['ml_prob']}%   |   "
-                               f"Skills: {cand['skill_pct']}%")
+    <!-- Loading -->
+    <div id="loading">
+      <div class="loading-spinner"></div>
+      <p>Running AI Analysis...</p>
+      <span>TF-IDF vectorization → Cosine similarity → Random Forest prediction</span>
+    </div>
 
-        c.setFillColor(colors.HexColor(rec_color))
-        c.rect(w-160, y-10, 120, 20, fill=True, stroke=False)
-        c.setFillColor(colors.HexColor('#276749'))
-        c.setFont("Helvetica-Bold", 9)
-        c.drawString(w-155, y-2, cand['recommendation'])
+    <!-- Winner Banner -->
+    <div id="winner-card">
+      <div class="winner-inner">
+        <div class="winner-avatar" id="w-avatar"></div>
+        <div class="winner-info">
+          <div class="winner-label">🏆 Top Recommended Candidate</div>
+          <div class="winner-name"       id="w-name"></div>
+          <div class="winner-score-text" id="w-reasons"></div>
+          <div class="winner-tags"       id="w-tags"></div>
+        </div>
+        <div class="winner-score-circle">
+          <div class="big"   id="w-score"></div>
+          <div class="small">/ 100</div>
+        </div>
+      </div>
+      <div id="email-status"></div>
+    </div>
 
-        if cand['matched_skills']:
-            c.setFont("Helvetica", 9)
-            c.setFillColor(colors.HexColor('#718096'))
-            c.drawString(44, y-30, f"Matched skills: {', '.join(cand['matched_skills'])}")
+    <!-- Candidate Cards -->
+    <div id="candidates-section">
+      <div class="section-title" style="margin-bottom:16px;">
+        👥 All Candidates — <span id="role-label"></span>
+      </div>
+      <div class="candidates-grid" id="cards-grid"></div>
+    </div>
 
-        y -= 68
+    <!-- Charts -->
+    <div id="charts-section">
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-title">📊 Score Comparison</div>
+          <canvas id="barChart" height="220"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">🕸️ Skill Radar — click candidate to switch</div>
+          <div class="radar-tabs" id="radar-tabs"></div>
+          <canvas id="radarChart" height="220"></canvas>
+        </div>
+      </div>
+    </div>
 
-    # Interview Questions
-    c.showPage()
-    y = h - 60
-    c.setFillColor(colors.HexColor('#1a365d'))
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(40, y, f"Suggested Interview Questions — {analysis_data['job_role']}")
-    y -= 20
-    c.line(40, y, w-40, y)
-    y -= 24
+    <!-- Interview Questions -->
+    <div id="questions-section" style="display:none;" class="section-card">
+      <div class="section-title">
+        🎯 AI Generated Interview Questions — <span id="q-role"></span>
+      </div>
+      <div id="questions-list"></div>
+    </div>
 
-    questions = INTERVIEW_QUESTIONS.get(analysis_data['job_role'], [])
-    for i, q in enumerate(questions, 1):
-        c.setFont("Helvetica-Bold", 11)
-        c.setFillColor(colors.HexColor('#2b6cb0'))
-        c.drawString(40, y, f"Q{i}.")
-        c.setFont("Helvetica", 11)
-        c.setFillColor(colors.HexColor('#1a202c'))
-        c.drawString(64, y, q)
-        y -= 28
+    <!-- Skill Gap -->
+    <div id="gap-section" style="display:none;" class="section-card">
+      <div class="section-title">⚠️ Skill Gap Analysis — Top Candidate Missing Skills</div>
+      <p style="font-size:13px;color:#718096;margin-bottom:12px;">
+        Top candidate is missing these skills. Consider training or lower priority for hiring.
+      </p>
+      <div id="gap-list"></div>
+    </div>
 
-    # Footer
-    c.setFillColor(colors.HexColor('#f0f4f8'))
-    c.rect(0, 0, w, 36, fill=True, stroke=False)
-    c.setFillColor(colors.HexColor('#718096'))
-    c.setFont("Helvetica", 9)
-    c.drawString(40, 13, "AI-Based Candidate Selection System  |  Sri Krishna Engineering  |  IET Industry Project")
+  </div><!-- end content -->
 
-    c.save()
-    buffer.seek(0)
-    return buffer
+  <div class="footer-bar">
+    Sri Krishna Engineering · AI-Based Candidate Selection System ·
+    IET Industry Project · Python · Flask · scikit-learn ·
+    TF-IDF · Random Forest · Cosine Similarity
+  </div>
+</div><!-- end main -->
+</div><!-- end layout -->
 
-# ── Routes ─────────────────────────────────────────────────────────────────────
-@app.route('/')
-def index():
-    return render_template('index.html', roles=list(JOB_ROLES.keys()))
+<script>
+const AVATAR_COLORS=['#3182ce','#38a169','#805ad5','#dd6b20','#e53e3e','#0987a0'];
+let barChart=null, radarChart=null;
+let allCandidates=[], lastResultData=null;
 
-@app.route('/history')
-def history():
-    analyses = Analysis.query.order_by(Analysis.created_at.desc()).all()
-    return render_template('history.html', analyses=analyses)
+function getInitials(name){
+  return name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+}
+function updateLabel(input){
+  const lbl=document.getElementById('file-label');
+  if(input.files.length===1)    lbl.textContent='✅ '+input.files[0].name;
+  else if(input.files.length>1) lbl.textContent='✅ '+input.files.length+' resumes selected';
+}
 
-@app.route('/analyze', methods=['POST'])
-def analyze():
-    job_role = request.form.get('job_role')
-    files    = request.files.getlist('resumes')
-    if not files or not job_role:
-        return jsonify({"error": "Please upload resumes and select a job role."})
+async function runAnalysis(){
+  const role  = document.getElementById('job-role').value;
+  const files = document.getElementById('resume-input').files;
+  const email = document.getElementById('hr-email').value;
+  if(!files.length){ alert('Please upload at least one PDF resume!'); return; }
 
-    job_desc   = JOB_ROLES[job_role]["description"]
-    candidates = []
+  ['winner-card','candidates-section','charts-section',
+   'questions-section','gap-section'].forEach(id=>{
+    document.getElementById(id).style.display='none';
+  });
+  document.getElementById('loading').style.display='block';
 
-    for file in files:
-        if file.filename == '': continue
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
-        file.save(filepath)
-        raw_text    = extract_text(filepath)
-        clean       = clean_text(raw_text)
-        tfidf       = tfidf_cosine_score(clean, job_desc)
-        kw          = keyword_score(raw_text, job_role)
-        ml_prob, ml_label = ml_predict(kw["skill_pct"],kw["has_exp"],
-                                       kw["has_edu"],kw["has_extra"],tfidf)
-        score = min(100, round(
-            (kw["skill_pct"]*0.35)+(tfidf*0.25)+(ml_prob*0.20)+
-            (kw["has_exp"]*20)+(kw["has_edu"]*10)+(kw["has_extra"]*5), 1))
+  const fd=new FormData();
+  fd.append('job_role', role);
+  fd.append('hr_email', email);
+  for(let f of files) fd.append('resumes',f);
 
-        explanation = kw["explanation"].copy()
-        explanation.insert(0, f"TF-IDF cosine similarity: {tfidf}%")
-        explanation.insert(1, f"ML model confidence: {ml_prob}%")
+  const res  = await fetch('/analyze',{method:'POST',body:fd});
+  const data = await res.json();
 
-        candidates.append({
-            "name":           file.filename.replace('.pdf','').replace('_',' ').title(),
-            "score":          score,
-            "tfidf_score":    tfidf,
-            "ml_prob":        ml_prob,
-            "ml_suitable":    ml_label,
-            "skill_pct":      kw["skill_pct"],
-            "has_exp":        kw["has_exp"],
-            "has_edu":        kw["has_edu"],
-            "has_extra":      kw["has_extra"],
-            "matched_skills": kw["matched_skills"],
-            "missing_skills": kw["missing_skills"],
-            "explanation":    explanation,
-            "radar":          get_radar(raw_text, job_role, tfidf)
-        })
+  document.getElementById('loading').style.display='none';
+  if(data.error){ alert(data.error); return; }
 
-    candidates.sort(key=lambda x: x["score"], reverse=True)
-    for i,c in enumerate(candidates):
-        c["rank"] = i+1
-        c["recommendation"] = ("Highly Recommended" if c["score"]>=70
-                               else "Recommended"   if c["score"]>=40
-                               else "Not Recommended")
+  allCandidates  = data.candidates;
+  lastResultData = data;
 
-    result = {
-        "job_role":      job_role,
-        "candidates":    candidates,
-        "top_candidate": candidates[0] if candidates else None,
-        "total":         len(candidates),
-        "recommended":   sum(1 for c in candidates if c["recommendation"]!="Not Recommended"),
-        "avg_score":     round(sum(c["score"] for c in candidates)/len(candidates),1) if candidates else 0,
-        "questions":     INTERVIEW_QUESTIONS.get(job_role, []),
-        "skill_gap":     candidates[0]["missing_skills"] if candidates else []
-    }
+  animateCount('stat-total',       data.total);
+  animateCount('stat-recommended', data.recommended);
+  animateCount('stat-avg',         data.avg_score);
+  document.getElementById('stat-top').textContent =
+    data.top_candidate ? data.top_candidate.name.split(' ')[0] : '—';
 
-    # Save to database
-    analysis_row = Analysis(
-        job_role=job_role,
-        total_resumes=len(candidates),
-        top_candidate=candidates[0]["name"] if candidates else "",
-        top_score=candidates[0]["score"] if candidates else 0,
-        avg_score=result["avg_score"],
-        recommended=result["recommended"]
-    )
-    db.session.add(analysis_row)
-    db.session.flush()
+  renderWinner(data.top_candidate, data.email_sent);
+  renderCards(data.candidates, data.job_role);
+  renderCharts(data.candidates);
+  renderQuestions(data.questions, data.job_role);
+  renderSkillGap(data.skill_gap);
+}
 
-    for c in candidates:
-        db.session.add(Candidate(
-            analysis_id=analysis_row.id,
-            name=c["name"], score=c["score"],
-            tfidf_score=c["tfidf_score"], ml_prob=c["ml_prob"],
-            ml_suitable=c["ml_suitable"], skill_pct=c["skill_pct"],
-            has_exp=c["has_exp"], has_edu=c["has_edu"],
-            matched_skills=", ".join(c["matched_skills"]),
-            recommendation=c["recommendation"], rank=c["rank"]
-        ))
-    db.session.commit()
+function animateCount(id,target){
+  const el=document.getElementById(id);
+  let cur=0; const step=target/30;
+  const t=setInterval(()=>{
+    cur=Math.min(cur+step,target);
+    el.textContent=Math.round(cur);
+    if(cur>=target) clearInterval(t);
+  },30);
+}
 
-    return jsonify(result)
+function renderWinner(top, emailSent){
+  document.getElementById('w-avatar').textContent  = getInitials(top.name);
+  document.getElementById('w-name').textContent    = top.name;
+  document.getElementById('w-score').textContent   = top.score;
+  document.getElementById('w-reasons').textContent =
+    '✔ '+top.explanation.slice(0,3).join('  •  ✔ ');
+  const tags=document.getElementById('w-tags');
+  tags.innerHTML='';
+  top.matched_skills.slice(0,5).forEach(s=>{
+    const t=document.createElement('span');
+    t.className='winner-tag'; t.textContent=s; tags.appendChild(t);
+  });
+  document.getElementById('winner-card').style.display='block';
 
-@app.route('/download_pdf', methods=['POST'])
-def download_pdf():
-    import json
-    data       = json.loads(request.form.get('data'))
-    candidates = data['candidates']
-    buffer     = generate_pdf_report(data, candidates)
-    return send_file(buffer, as_attachment=True,
-                     download_name='Candidate_Report.pdf',
-                     mimetype='application/pdf')
+  const emailDiv=document.getElementById('email-status');
+  if(emailSent){
+    emailDiv.innerHTML='<div class="email-sent-badge">📧 Results sent to HR email successfully!</div>';
+  } else {
+    emailDiv.innerHTML='';
+  }
+}
 
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    app.run(debug=False)
+function renderCards(candidates, role){
+  document.getElementById('role-label').textContent=role;
+  const grid=document.getElementById('cards-grid');
+  grid.innerHTML='';
+  candidates.forEach((c,i)=>{
+    const color  =AVATAR_COLORS[i%AVATAR_COLORS.length];
+    const rankCls=i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'';
+    const rankEmoji=i===0?'🥇':i===1?'🥈':i===2?'🥉':'#'+(i+1);
+    const fillCls=c.score>=70?'high':c.score>=40?'medium':'low';
+    const recCls =c.recommendation==='Highly Recommended'?'rec-high':
+                  c.recommendation==='Recommended'?'rec-med':'rec-low';
+    const skills =c.matched_skills.map(s=>`<span class="skill-chip">${s}</span>`).join('')
+                ||'<span style="color:#a0aec0;font-size:11px">No skills matched</span>';
+    const mlStatus=c.ml_suitable
+      ?'🟢 ML model: Suitable candidate'
+      :'🔴 ML model: Below threshold';
+
+    grid.innerHTML+=`
+    <div class="cand-card ${rankCls}">
+      <div class="cand-header">
+        <div class="cand-avatar" style="background:${color}">${getInitials(c.name)}</div>
+        <div>
+          <div class="cand-name">${rankEmoji} ${c.name}</div>
+          <div class="cand-rank">Rank #${c.rank} · ${c.recommendation}</div>
+        </div>
+      </div>
+      <div class="ml-indicator"><div class="ml-dot"></div>${mlStatus}</div>
+      <div class="cand-score-row">
+        <span class="cand-score-label">Overall Score</span>
+        <span class="cand-score-val">${c.score}
+          <span style="font-size:14px;font-weight:400;color:#718096">/100</span>
+        </span>
+      </div>
+      <div class="score-track">
+        <div class="score-fill ${fillCls}" style="width:${c.score}%"></div>
+      </div>
+      <div class="metrics-row">
+        <div class="metric-box">
+          <div class="m-val">${c.tfidf_score}%</div>
+          <div class="m-label">TF-IDF Score</div>
+        </div>
+        <div class="metric-box">
+          <div class="m-val">${c.ml_prob}%</div>
+          <div class="m-label">ML Confidence</div>
+        </div>
+        <div class="metric-box">
+          <div class="m-val">${c.skill_pct}%</div>
+          <div class="m-label">Skill Match</div>
+        </div>
+        <div class="metric-box">
+          <div class="m-val">${c.has_exp?'Yes':'No'}</div>
+          <div class="m-label">Experience</div>
+        </div>
+      </div>
+      <div class="skills-area">
+        <div class="skills-title">MATCHED SKILLS</div>${skills}
+      </div>
+      <div class="rec-badge ${recCls}">${c.recommendation}</div>
+    </div>`;
+  });
+  document.getElementById('candidates-section').style.display='block';
+}
+
+function renderCharts(candidates){
+  const names =candidates.map(c=>c.name);
+  const scores=candidates.map(c=>c.score);
+  if(barChart) barChart.destroy();
+  barChart=new Chart(document.getElementById('barChart').getContext('2d'),{
+    type:'bar',
+    data:{
+      labels:names,
+      datasets:[
+        {label:'Total Score',data:scores,
+         backgroundColor:scores.map(s=>s>=70?'rgba(56,161,105,0.8)':s>=40?'rgba(214,158,46,0.8)':'rgba(229,62,62,0.8)'),
+         borderRadius:8},
+        {label:'TF-IDF',data:candidates.map(c=>c.tfidf_score),
+         backgroundColor:'rgba(49,130,206,0.4)',borderRadius:8},
+        {label:'ML Confidence',data:candidates.map(c=>c.ml_prob),
+         backgroundColor:'rgba(128,90,213,0.4)',borderRadius:8}
+      ]
+    },
+    options:{responsive:true,
+      scales:{y:{beginAtZero:true,max:100}},
+      plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}}
+  });
+
+  const tabs=document.getElementById('radar-tabs');
+  tabs.innerHTML='';
+  candidates.forEach((c,i)=>{
+    const btn=document.createElement('button');
+    btn.className='radar-tab'+(i===0?' active':'');
+    btn.textContent=c.name;
+    btn.onclick=()=>{
+      document.querySelectorAll('.radar-tab').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      updateRadar(c);
+    };
+    tabs.appendChild(btn);
+  });
+  updateRadar(candidates[0]);
+  document.getElementById('charts-section').style.display='block';
+}
+
+function updateRadar(c){
+  const labels=Object.keys(c.radar);
+  const values=Object.values(c.radar);
+  if(radarChart) radarChart.destroy();
+  radarChart=new Chart(document.getElementById('radarChart').getContext('2d'),{
+    type:'radar',
+    data:{labels,datasets:[{
+      label:c.name,data:values,
+      backgroundColor:'rgba(49,130,206,0.15)',
+      borderColor:'rgba(49,130,206,0.9)',
+      pointBackgroundColor:'#3182ce',borderWidth:2
+    }]},
+    options:{responsive:true,
+      scales:{r:{beginAtZero:true,max:100,
+        ticks:{stepSize:20,font:{size:10}},
+        pointLabels:{font:{size:11}}}},
+      plugins:{legend:{display:false}}}
+  });
+}
+
+function renderQuestions(questions,role){
+  if(!questions||!questions.length) return;
+  document.getElementById('q-role').textContent=role;
+  const list=document.getElementById('questions-list');
+  list.innerHTML=questions.map((q,i)=>
+    `<div class="question-item"><strong style="color:#1a365d">Q${i+1}.</strong> ${q}</div>`
+  ).join('');
+  document.getElementById('questions-section').style.display='block';
+}
+
+function renderSkillGap(skillGap){
+  if(!skillGap||!skillGap.length) return;
+  const list=document.getElementById('gap-list');
+  list.innerHTML=skillGap.map(s=>
+    `<span class="gap-chip">⚠️ ${s}</span>`
+  ).join('');
+  document.getElementById('gap-section').style.display='block';
+}
+
+async function downloadPDF(){
+  if(!lastResultData){ alert('Please run analysis first!'); return; }
+  const form=document.createElement('form');
+  form.method='POST'; form.action='/download_pdf';
+  const input=document.createElement('input');
+  input.type='hidden'; input.name='data';
+  input.value=JSON.stringify(lastResultData);
+  form.appendChild(input);
+  document.body.appendChild(form);
+  form.submit();
+  document.body.removeChild(form);
+}
+</script>
+</body>
+</html>
+'''
